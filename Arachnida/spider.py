@@ -12,6 +12,7 @@
 
 import os
 import sys
+import argparse
 import requests
 from urllib.parse import urlsplit
 from bs4 import BeautifulSoup
@@ -36,12 +37,12 @@ class RequestThread(Thread):
 		self.url:			str			= url
 		self.depth:			int			= depth
 
-	def get_links(self, url: str) -> list[str]:
+	def get_links(self, url: str) -> list[str] | None:
 		ret: list[str] = []
 
 		response = requests.get(url)
 		if response.status_code != 200:
-			return
+			return None
 		
 		soup = BeautifulSoup(response.text, "html.parser")
 		self.spider.urls_content[url] = soup
@@ -69,7 +70,9 @@ class RequestThread(Thread):
 
 	def run(self) -> None:
 		links = self.get_links(self.url)
-
+		if (links is None):
+			return
+		
 		if (self.depth > 1):
 			for link in links:
 				reqThread = RequestThread(link, self.spider, self.depth - 1)
@@ -79,11 +82,10 @@ class RequestThread(Thread):
 
 
 class Spider:
-	def __init__(self, url: str, other_website: bool = False, threading=False) -> None:
+	def __init__(self, url: str, other_website: bool = False) -> None:
 		self.base_url:		str				= get_base_url(url)
 		self.url:			str				= url
 		self.other_website: bool			= other_website
-		self.threading:		bool			= threading
 
 		self.threads:		list[Thread]	= []
 
@@ -104,7 +106,7 @@ class Spider:
 
 def get_images(soup: BeautifulSoup) -> list[str]:
 	ret: list[str] = []
-	extensions: list[str] = ["jpg", "jpeg", "png", "gif", "webp"]
+	extensions: list[str] = ["jpg", "jpeg", "png", "gif", "webp", "bmp"]
 
 	for tag in soup.find_all("img"):
 		if (not "src" in tag.attrs):
@@ -130,24 +132,40 @@ def download_images(images: dict[str, list[str]], folder: "str") -> None:
 			os.mkdir(folder_name)
 
 		for image in images[url]:
+			image_name = image.split("/")[-1]
+			
+			
 			image_location = image
 			if urlsplit(image).scheme == "":
 				image_location = get_base_url(url) + image
-			image_name = image.split("/")[-1]
 
 			response = requests.get(image_location)
-			with open(f"{folder_name}/{image_name}", "wb") as f:
-				f.write(response.content)
-			print_carriage_return(f"Downloaded from {urlsplit(url).netloc} | {i}/{sum([len(image) for image in images.values()])}..")
+			try:
+				with open(f"{folder_name}/{image_name}", "wb") as f:
+					f.write(response.content)
+			except: #bad name
+				continue
+
+			print_carriage_return(f"{i}/{sum([len(image) for image in images.values()])} | Downloaded from {urlsplit(url).netloc} {image_name}..")
 			i += 1
 
 def main() -> None:
-	url = "https://42.fr/"
+	parser = argparse.ArgumentParser(description='Spider web crawler crawls recursively to a given depth and downloads images from the urls found.')
+	parser.add_argument("url", help="The url to start crawling from")
+	parser.add_argument('-r', '--recursive', help='Activates the recursive crawling', action='store_true')
+	parser.add_argument('-l', '--limit', help='Depth limit for the spider', type=int, default=1)
+	parser.add_argument('-p', '--path', help='Path to save the images', default='data')
+	parser.add_argument('-o', '--other_website', help='Crawl other websites', action='store_true')
+	args = parser.parse_args()
 
-	print(f"Starting urls crawling on {url}..")
+	if (get_base_url(args.url) is None):
+		print("Correct URL format is required : http(s)://www.example.com")
+		return
+	
+	print(f"Starting urls crawling on {args.url}..")
 
-	spider = Spider(url)
-	spider.crawl(3)
+	spider = Spider(args.url, other_website=args.other_website)
+	spider.crawl(args.limit)
 	
 	print(f"\nStarting images crawling on {len(spider.urls_content)} urls..")
 
