@@ -10,6 +10,7 @@
 #                                                                              #
 # **************************************************************************** #
 
+import os
 import sys
 import requests
 from urllib.parse import urlsplit
@@ -17,7 +18,7 @@ from bs4 import BeautifulSoup
 from threading import Thread
 
 def print_carriage_return(text: str) -> None:
-	sys.stdout.write("\r" + text)
+	sys.stdout.write("\r" + text + " " * (100 - len(text)))
 	sys.stdout.flush()
 
 def get_base_url(url: str) -> str | None:
@@ -103,7 +104,7 @@ class Spider:
 
 def get_images(soup: BeautifulSoup) -> list[str]:
 	ret: list[str] = []
-	extensions: list[str] = ["jpg", "jpeg", "png", "gif", "svg", "webp"]
+	extensions: list[str] = ["jpg", "jpeg", "png", "gif", "webp"]
 
 	for tag in soup.find_all("img"):
 		if (not "src" in tag.attrs):
@@ -116,6 +117,29 @@ def get_images(soup: BeautifulSoup) -> list[str]:
 		ret.append(src)
 
 	return ret
+
+def download_images(images: dict[str, list[str]], folder: "str") -> None:
+	if not os.path.exists(folder):
+		os.mkdir(folder)
+
+	i = 0
+	
+	for url in images:
+		folder_name = f"{folder}/{urlsplit(url).netloc}"
+		if not os.path.exists(folder_name):
+			os.mkdir(folder_name)
+
+		for image in images[url]:
+			image_location = image
+			if urlsplit(image).scheme == "":
+				image_location = get_base_url(url) + image
+			image_name = image.split("/")[-1]
+
+			response = requests.get(image_location)
+			with open(f"{folder_name}/{image_name}", "wb") as f:
+				f.write(response.content)
+			print_carriage_return(f"Downloaded from {urlsplit(url).netloc} | {i}/{sum([len(image) for image in images.values()])}..")
+			i += 1
 
 def main() -> None:
 	url = "https://42.fr/"
@@ -133,6 +157,7 @@ def main() -> None:
 		images[url] = get_images(content)
 		print_carriage_return(f"Found {sum([len(image) for image in images.values()])} urls with images..")
 
+	download_images(images, "data")
 
 if __name__ == "__main__":
 	main()
