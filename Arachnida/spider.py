@@ -134,17 +134,18 @@ def download_images(images: dict[str, list[str]], folder: "str") -> None:
 		for image in images[url]:
 			image_name = image.split("/")[-1]
 			
-			
-			image_location = image
-			if urlsplit(image).scheme == "":
-				image_location = get_base_url(url) + image
+			if (urlsplit(image).netloc == ''):
+				image = url + image
 
-			response = requests.get(image_location)
+			if (image.startswith("//")):
+				image = "https:" + image
+			
 			try:
+				response = requests.get(image)
 				with open(f"{folder_name}/{image_name}", "wb") as f:
 					f.write(response.content)
-			except: #bad name
-				continue
+			except Exception as e: #bad name
+				pass
 
 			print_carriage_return(f"{i}/{sum([len(image) for image in images.values()])} | Downloaded from {urlsplit(url).netloc} {image_name}..")
 			i += 1
